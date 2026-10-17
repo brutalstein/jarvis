@@ -157,6 +157,6 @@ def test_action_kind_not_bypassable(setup):
 
 def test_idempotency_checks_dependencies(setup):
     parent = setup.admit(TaskSpec('parent'))
-    a = setup.admit(TaskSpec('task', idempotency_key='dependency-key'))
+    setup.admit(TaskSpec('task', idempotency_key='dependency-key'))
     with pytest.raises(Conflict):
         setup.admit(TaskSpec('task', idempotency_key='dependency-key', dependencies=(parent['id'],)))
