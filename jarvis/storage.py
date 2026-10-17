@@ -191,9 +191,9 @@ class Store:
                 LEFT JOIN actions a ON a.task_id=t.id
                 WHERE t.status IN (?,?)
                   OR (a.status IN ('INTENT_RECORDED','RECOVERY_REQUIRED')
-                      AND t.status NOT IN (?,?,?,?))''',
+                      AND t.status NOT IN (?,?,?,?,?))''',
                 (State.RUNNING, State.VERIFYING, State.COMPLETED, State.FAILED,
-                 State.CANCELLED, State.BLOCKED)).fetchall()
+                 State.CANCELLED, State.BLOCKED, State.RECOVERY_REQUIRED)).fetchall()
             for row in rows:
                 self.db.execute('UPDATE tasks SET status=?,lease_holder=NULL,lease_until=NULL,updated_at=? WHERE id=?',
                                 (State.RECOVERY_REQUIRED, utc(), row['id']))
