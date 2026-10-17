@@ -11,7 +11,7 @@ jarvis/
   persistence/    sqlite.py                       [durable single-host SQLite]
   integrations/   openclaw.py · n8n.py · gemini.py
                   process.py · errors.py          [external clients; no autonomy]
-  entrypoints/    http.py · cli.py                [delivery/transport boundary]
+  entrypoints/    http.py · n8n_ingress.py · cli.py                [delivery/transport boundary]
   *.py            legacy import facades           [no second implementation]
 ```
 
