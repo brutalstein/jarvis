@@ -113,6 +113,18 @@ class Store:
             self.event(task_id, 'task.created', {'dependencies': list(spec.dependencies)})
         return self.get(task_id)
 
+    def claim_admission(self, task_id: str) -> bool:
+        """Claim CREATED->VALIDATING atomically to prevent concurrent duplicate admits."""
+        with self.tx():
+            changed = self.db.execute(
+                'UPDATE tasks SET status=?,updated_at=? WHERE id=? AND status=?',
+                (State.VALIDATING, utc(), task_id, State.CREATED),
+            )
+            if changed.rowcount:
+                self.event(task_id, 'state.changed',
+                           {'from': State.CREATED, 'to': State.VALIDATING})
+            return changed.rowcount == 1
+
     def transition(self, task_id: str, new: State, data: dict | None = None, *, owner: str | None = None) -> dict:
         with self.tx():
             task = self.get(task_id)
@@ -195,11 +207,12 @@ class Store:
         with self.tx():
             rows = self.db.execute('''SELECT DISTINCT t.id FROM tasks t
                 LEFT JOIN actions a ON a.task_id=t.id
-                WHERE t.status IN (?,?)
+                WHERE t.status IN (?,?,?,?)
                   OR (t.status=? AND t.lease_holder IS NOT NULL)
                   OR (a.status IN ('INTENT_RECORDED','RECOVERY_REQUIRED')
                       AND t.status NOT IN (?,?,?,?,?))''',
-                (State.RUNNING, State.VERIFYING, State.READY,
+                (State.RUNNING, State.VERIFYING, State.VALIDATING,
+                 State.PLANNING, State.READY,
                  State.COMPLETED, State.FAILED, State.CANCELLED,
                  State.BLOCKED, State.RECOVERY_REQUIRED)).fetchall()
             for row in rows:

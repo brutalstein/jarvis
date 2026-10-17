@@ -28,3 +28,5 @@ Run `python -m pytest -q`, `python -m compileall -q jarvis services`, and `pytho
 7. RECOVERY_REQUIRED tasks with an unresolved action cannot be made READY without explicit reconciliation.
 8. OpenClaw Gateway read-only access now checks protocol and granted scopes from the actual hello-ok response.
 9. CI uses the current GitHub-maintained Node 24+ based checkout/setup-python actions.
+
+10. Concurrent idempotent task creation now has an atomic admission claim. Restart reconciliation quarantines interrupted VALIDATING/PLANNING jobs instead of leaving them stuck mid-admission.
