@@ -12,7 +12,7 @@ from .n8n_ingress import install_n8n_ingress
 def create_app(store: Store | None = None, secret: str | None = None):
     try:
         from fastapi import FastAPI, Header, HTTPException
-                from pydantic import BaseModel, Field
+        from pydantic import BaseModel, Field
     except ImportError as exc:
         raise RuntimeError('Install: pip install -e .[api]') from exc
     token = secret if secret is not None else os.getenv('JARVIS_OPERATOR_TOKEN', '')
