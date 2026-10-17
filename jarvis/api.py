@@ -116,22 +116,8 @@ def create_app(store: Store | None = None, secret: str | None = None):
     # No arbitrary category, risk, provider or tool fields are accepted.
     class N8nEchoRequest(BaseModel):
         model_config = ConfigDict(extra='forbid')
-        workflow_id: str = Field(pattern=r'^[A-Za-z0-9_-]{1,48}  # Uvicorn uses jarvis.api:serve for fail-closed startup.
-def serve():
-    import uvicorn
-    host = os.getenv('JARVIS_BIND', '127.0.0.1')
-    if host not in ('127.0.0.1', '::1'):
-        raise RuntimeError('Only loopback binding is supported in v0.1')
-    uvicorn.run(create_app(), host=host, port=int(os.getenv('JARVIS_PORT', '8765')))
-)
-        execution_id: str = Field(pattern=r'^[A-Za-z0-9_-]{1,48}  # Uvicorn uses jarvis.api:serve for fail-closed startup.
-def serve():
-    import uvicorn
-    host = os.getenv('JARVIS_BIND', '127.0.0.1')
-    if host not in ('127.0.0.1', '::1'):
-        raise RuntimeError('Only loopback binding is supported in v0.1')
-    uvicorn.run(create_app(), host=host, port=int(os.getenv('JARVIS_PORT', '8765')))
-)
+        workflow_id: str = Field(pattern=r'^[A-Za-z0-9_-]{1,48}$')
+        execution_id: str = Field(pattern=r'^[A-Za-z0-9_-]{1,48}$')
         objective: str = Field(min_length=1, max_length=2000)
 
     @app.post('/v1/integrations/n8n/echo')
