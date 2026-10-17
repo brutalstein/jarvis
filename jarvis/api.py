@@ -2,7 +2,7 @@
 import hmac
 import os
 
-from .contracts import Conflict, Denied, Risk, TaskSpec
+from .contracts import Conflict, Denied, Risk, State, TaskSpec
 from .engine import Engine
 from .policy import Principal
 from .storage import Store
@@ -11,7 +11,8 @@ from .storage import Store
 def create_app(store: Store | None = None, secret: str | None = None):
     try:
         from fastapi import FastAPI, Header, HTTPException
-        from pydantic import BaseModel, Field
+        from fastapi.responses import JSONResponse
+        from pydantic import BaseModel, ConfigDict, Field
     except ImportError as exc:
         raise RuntimeError('Install: pip install -e .[api]') from exc
     token = secret if secret is not None else os.getenv('JARVIS_OPERATOR_TOKEN', '')
@@ -107,6 +108,70 @@ def create_app(store: Store | None = None, secret: str | None = None):
         authenticate(authorization)
         try:
             return engine.resume_dependencies(task_id)
+        except (Denied, Conflict, KeyError) as exc:
+            fail(exc)
+
+    # Intentionally narrow n8n ingress. The workflow token can ONLY request a
+    # deterministic, local, side-effect-free echo task; it is not an operator token.
+    # No arbitrary category, risk, provider or tool fields are accepted.
+    class N8nEchoRequest(BaseModel):
+        model_config = ConfigDict(extra='forbid')
+        workflow_id: str = Field(pattern=r'^[A-Za-z0-9_-]{1,48}  # Uvicorn uses jarvis.api:serve for fail-closed startup.
+def serve():
+    import uvicorn
+    host = os.getenv('JARVIS_BIND', '127.0.0.1')
+    if host not in ('127.0.0.1', '::1'):
+        raise RuntimeError('Only loopback binding is supported in v0.1')
+    uvicorn.run(create_app(), host=host, port=int(os.getenv('JARVIS_PORT', '8765')))
+)
+        execution_id: str = Field(pattern=r'^[A-Za-z0-9_-]{1,48}  # Uvicorn uses jarvis.api:serve for fail-closed startup.
+def serve():
+    import uvicorn
+    host = os.getenv('JARVIS_BIND', '127.0.0.1')
+    if host not in ('127.0.0.1', '::1'):
+        raise RuntimeError('Only loopback binding is supported in v0.1')
+    uvicorn.run(create_app(), host=host, port=int(os.getenv('JARVIS_PORT', '8765')))
+)
+        objective: str = Field(min_length=1, max_length=2000)
+
+    @app.post('/v1/integrations/n8n/echo')
+    def n8n_echo(body: N8nEchoRequest, x_jarvis_n8n_token: str | None = Header(default=None)):
+        token = os.getenv('JARVIS_N8N_INGEST_TOKEN', '')
+        allowed = {
+            value.strip() for value in os.getenv('JARVIS_N8N_WORKFLOW_IDS', '').split(',')
+            if value.strip()
+        }
+        # Fail-closed without a separately provisioned, suitably long secret and
+        # explicit workflow allowlist. Nothing shares the operator bearer token.
+        if len(token) < 32 or not x_jarvis_n8n_token or not hmac.compare_digest(
+            token, x_jarvis_n8n_token
+        ):
+            raise HTTPException(status_code=401, detail='Invalid n8n integration credential')
+        if body.workflow_id not in allowed:
+            raise HTTPException(status_code=403, detail='Workflow is not authorized')
+        principal = Principal(f'n8n:{body.workflow_id}', frozenset({'model.text'}))
+        try:
+            task = engine.admit(TaskSpec(
+                objective=body.objective, category='analysis', capability='model.text',
+                risk=Risk.LOW,
+                idempotency_key=f'n8n:{body.workflow_id}:{body.execution_id}',
+            ))
+            if task['status'] == State.READY:
+                try:
+                    engine.run_echo(task['id'], principal)
+                except Conflict:
+                    # Another concurrent delivery may own this exact task.
+                    # A repeat must NEVER create a second execution.
+                    pass
+            current = db.get(task['id'])
+            if current['status'] == State.COMPLETED:
+                return {'task_id': task['id'], 'status': 'COMPLETED',
+                        'result': body.objective, 'verified': True}
+            if current['status'] in (State.RECOVERY_REQUIRED, State.FAILED, State.BLOCKED):
+                raise HTTPException(status_code=409, detail='Task requires operator reconciliation')
+            return JSONResponse(status_code=202,
+                                content={'task_id': task['id'], 'status': current['status'],
+                                         'verified': False})
         except (Denied, Conflict, KeyError) as exc:
             fail(exc)
     return app
