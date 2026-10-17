@@ -25,10 +25,10 @@ class Engine:
 
     def admit(self, spec: TaskSpec) -> dict:
         task = self.store.create(spec)
-        if task['status'] != State.CREATED:
-            return task
         tid = task['id']
-        self.store.transition(tid, State.VALIDATING)
+        # Only one concurrent admission may advance a newly created task.
+        if not self.store.claim_admission(tid):
+            return self.store.get(tid)
         self.store.transition(tid, State.PLANNING)
         if spec.dependencies and any(self.store.get(d)['status'] != State.COMPLETED for d in spec.dependencies):
             return self.store.transition(tid, State.WAITING_FOR_DEPENDENCY)

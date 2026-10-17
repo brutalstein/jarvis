@@ -12,3 +12,5 @@ The v0.1 SQLite store is intended for **one process / one host**, not multi-host
 
 
 **Hardening follow-up:** Operation-aware model selection, lease-authorized task mutations, verified action-linked completion and orphaned action-intent quarantine are implemented in the core. External execution isolation and live cross-product tests remain mandatory before broader activation.
+
+**n8n trigger milestone:** An authenticated, allowlisted n8n echo ingress executes the local verifier through Core. It does not grant n8n general agent execution, and has not been live-tested against a running n8n instance. Full workflows, rate limiting and outbound delivery require further work.

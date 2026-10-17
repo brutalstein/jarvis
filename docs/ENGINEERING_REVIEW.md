@@ -13,3 +13,7 @@
 Evidence: `python -m pytest -q` runs 22 local deterministic tests for state invariants, authorization, approvals, idempotency, leases, dependencies, restart recovery and routing. Individual optional clients are **not** evidence of real service integration. No production-ready claim is made.
 
 Acceptance coverage: state machine **partial**; policy **partial**; task persistence **verified locally**; browser execution **not live-verified**; n8n automation **not implemented end-to-end**; OpenClaw agent execution **not implemented**; Claude/Codex **not implemented**; Gemini adapter **implemented not live verified**; multitenancy **out of scope**; independent external verification **not implemented**.
+
+## n8n ingress addendum
+
+A dedicated n8n proof endpoint, credential isolation, workflow allowlist and database-backed execution identity are now implemented. Concurrency and crash-replay regression tests cover the local Core contract. Importable workflow JSON does not contain credentials. These are **not live n8n or model-agent tests**. Verify current test totals using the GitHub Actions run attached to the latest commit instead of relying on historical counts in this document.

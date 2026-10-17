@@ -60,3 +60,7 @@ No real OpenClaw agent execution, n8n→OpenClaw round trip, end-to-end browser 
 ## Core hardening update
 
 See [Core hardening](docs/CORE_HARDENING.md) for enforced routing, lease, verified-action completion, and orphaned-intent recovery. All external integrations remain opt-in and not live-verified.
+
+## n8n ingress (bounded proof workflow)
+
+A dedicated, opt-in n8n task ingress supports idempotent, verified, side-effect-free echo requests without sharing the operator token. See [n8n ingress](docs/N8N_INGRESS.md). This is a developer proof path, not an autonomous n8n→OpenClaw integration.
