@@ -45,6 +45,10 @@ class ActionGate:
         return approval_id
 
     def _precheck(self, action: Action, principal: Principal) -> None:
+        # In v0.1 the only executable kind is built-in, local and side-effect-free.
+        # Additional executors require a reviewed policy registry, not generic passthrough.
+        if (action.kind, action.target, action.capability) != ('builtin.echo', 'local', 'model.text'):
+            raise Denied('Action kind/target not registered for execution')
         if not principal.identity or action.capability not in principal.capabilities:
             raise Denied('Missing delegated capability')
         task = self.store.get(action.task_id)

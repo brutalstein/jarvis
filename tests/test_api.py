@@ -35,3 +35,9 @@ def test_invalid_requests_rejected(api):
     h = {'Authorization':'Bearer ' + 'x' * 32}
     assert api.post('/v1/tasks', json={'objective':''},headers=h).status_code == 422
     assert api.post('/v1/tasks', json={'objective':'x','capability':'exec.shell'},headers=h).status_code == 403
+
+
+def test_server_refuses_missing_token():
+    from jarvis.api import create_app
+    with pytest.raises(RuntimeError):
+        create_app(Store(':memory:'), 'too-short')

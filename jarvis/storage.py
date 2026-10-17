@@ -89,12 +89,16 @@ class Store:
         task_id = str(uuid4())
         with self.tx():
             if spec.idempotency_key:
-                existing = self.db.execute('SELECT id,objective,category,capability,risk FROM tasks WHERE idempotency_key=?',
+                existing = self.db.execute('SELECT id,objective,category,capability,risk,parent_id FROM tasks WHERE idempotency_key=?',
                                            (spec.idempotency_key,)).fetchone()
                 if existing:
                     if (existing['objective'], existing['category'], existing['capability'], existing['risk']) != (
                             spec.objective, spec.category, spec.capability, spec.risk.value):
                         raise Conflict('Idempotency key reused for a different request')
+                    old_deps = tuple(sorted(r['requires'] for r in self.db.execute(
+                        'SELECT requires FROM dependencies WHERE task_id=?', (existing['id'],))))
+                    if existing['parent_id'] != spec.parent_id or old_deps != tuple(sorted(spec.dependencies)):
+                        raise Conflict('Idempotency key reused with different dependencies or parent')
                     return self.get(existing['id'])
             if spec.parent_id and not self.db.execute('SELECT 1 FROM tasks WHERE id=?', (spec.parent_id,)).fetchone():
                 raise Denied('Unknown parent')
