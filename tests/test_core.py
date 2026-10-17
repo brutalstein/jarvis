@@ -160,3 +160,96 @@ def test_idempotency_checks_dependencies(setup):
     setup.admit(TaskSpec('task', idempotency_key='dependency-key'))
     with pytest.raises(Conflict):
         setup.admit(TaskSpec('task', idempotency_key='dependency-key', dependencies=(parent['id'],)))
+
+def test_route_rejects_missing_operation_auth_and_health():
+    registry = [
+        Capability('text-only', frozenset({'coding'}), True, 0, 1),
+        Capability('unauthenticated', frozenset({'coding'}), True, 0, 2,
+                   operations=frozenset({'coding.review'}), authenticated=False),
+        Capability('offline', frozenset({'coding'}), True, 0, 3,
+                   operations=frozenset({'coding.review'}), healthy=False),
+        Capability('coding-ready', frozenset({'coding'}), True, 0, 4,
+                   operations=frozenset({'coding.review'})),
+    ]
+    router = Router(registry)
+    req = RouteRequest('coding', 'coding.review', frozenset(p.name for p in registry))
+    assert router.choose(req).provider == 'coding-ready'
+    with pytest.raises(Denied):
+        router.choose(RouteRequest('coding', 'browser.navigate', req.allowed_providers))
+
+
+def test_forged_completion_requires_persisted_exact_action_evidence(setup):
+    task = setup.admit(TaskSpec('integrity'))
+    setup.store.transition(task['id'], State.RUNNING)
+    setup.store.transition(task['id'], State.VERIFYING)
+    with pytest.raises(Denied):
+        setup.store.transition(task['id'], State.COMPLETED,
+                               {'verified': True, 'evidence': {'action_digest': 'forged'}})
+
+
+def test_orphan_action_intent_is_quarantined_after_restart(tmp_path):
+    path = str(tmp_path / 'orphan.db')
+    one = Store(path)
+    eng = Engine(one)
+    task = eng.admit(TaskSpec('ambiguous'))
+    action = eng.propose_echo(task['id'])
+    digest = eng.gate.authorize(action, OP)
+    assert one.get(task['id'])['status'] == State.READY
+    one.close()
+    two = Store(path)
+    assert two.reconcile_interrupted() == [task['id']]
+    assert two.get(task['id'])['status'] == State.RECOVERY_REQUIRED
+    assert two.db.execute('SELECT status FROM actions WHERE action_digest=?',
+                          (digest,)).fetchone()['status'] == 'RECOVERY_REQUIRED'
+    assert two.reconcile_interrupted() == []
+    two.close()
+
+
+def test_other_worker_cannot_mutate_leased_task(setup):
+    task = setup.admit(TaskSpec('lease control'))
+    assert setup.store.lease(task['id'], 'worker-a', time.time(), 60)
+    with pytest.raises(Conflict):
+        setup.store.transition(task['id'], State.RUNNING)
+    with pytest.raises(Conflict):
+        setup.store.transition(task['id'], State.RUNNING, owner='worker-b')
+    setup.store.transition(task['id'], State.RUNNING, owner='worker-a')
+    setup.store.release(task['id'], 'worker-a')
+
+
+def test_completion_does_not_accept_other_tasks_verified_action(setup):
+    first = setup.admit(TaskSpec('first'))
+    setup.run_echo(first['id'], OP)
+    # Actual verified-action identifier comes from persisted action table.
+    digest = setup.store.db.execute('SELECT action_digest FROM actions WHERE task_id=?',
+                                    (first['id'],)).fetchone()['action_digest']
+    other = setup.admit(TaskSpec('other'))
+    setup.store.transition(other['id'], State.RUNNING)
+    setup.store.transition(other['id'], State.VERIFYING)
+    with pytest.raises(Denied):
+        setup.store.transition(other['id'], State.COMPLETED,
+                               {'verified': True, 'evidence': {'action_digest': digest}})
+
+def test_abandoned_ready_lease_is_quarantined(tmp_path):
+    path = str(tmp_path / 'lease-recovery.db')
+    one = Store(path)
+    task = Engine(one).admit(TaskSpec('test'))
+    assert one.lease(task['id'], 'dead-worker', time.time(), 100)
+    one.close()
+    two = Store(path)
+    assert two.reconcile_interrupted() == [task['id']]
+    assert two.get(task['id'])['status'] == State.RECOVERY_REQUIRED
+    two.close()
+
+
+def test_unreconciled_action_blocks_recovery_retry(tmp_path):
+    path = str(tmp_path / 'unreconciled.db')
+    one = Store(path)
+    task = Engine(one).admit(TaskSpec('uncertain'))
+    action = Engine(one).propose_echo(task['id'])
+    Engine(one).gate.authorize(action, OP)
+    one.close()
+    two = Store(path)
+    two.reconcile_interrupted()
+    with pytest.raises(Denied, match='Unreconciled'):
+        two.transition(task['id'], State.READY)
+    two.close()

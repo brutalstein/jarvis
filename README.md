@@ -55,3 +55,8 @@ No real OpenClaw agent execution, n8n→OpenClaw round trip, end-to-end browser 
 ## Design intent
 
 **Models propose. Policies authorize. Executors act. Evidence verifies. JARVIS Core records.** No UI code is included. Authentication credentials are provided by environment variables and are never committed.
+
+
+## Core hardening update
+
+See [Core hardening](docs/CORE_HARDENING.md) for enforced routing, lease, verified-action completion, and orphaned-intent recovery. All external integrations remain opt-in and not live-verified.

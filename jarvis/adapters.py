@@ -126,6 +126,12 @@ class OpenClaw:
                     if frame.get('type') == 'res' and frame.get('id') == ident:
                         if not frame.get('ok'):
                             raise Denied('OpenClaw connect failed')
+                        hello = frame.get('payload')
+                        if not isinstance(hello, dict) or hello.get('type') != 'hello-ok' or hello.get('protocol') != 4:
+                            raise Denied('Incompatible OpenClaw handshake')
+                        auth = hello.get('auth')
+                        if not isinstance(auth, dict) or 'operator.read' not in auth.get('scopes', []):
+                            raise Denied('OpenClaw did not grant read scope')
                         break
                 reqid = str(uuid4())
                 await ws.send(json.dumps({'type':'req','id':reqid,'method':method,'params':params or {}}))

@@ -26,6 +26,8 @@ class Router:
         candidates = [p for p in self.registry if p.enabled
                       and p.name in request.allowed_providers
                       and request.category in p.categories
+                      and request.capability in p.operations
+                      and p.authenticated and p.healthy
                       and (not request.needs_tools or p.supports_tools)
                       and p.max_cost <= request.max_cost]
         if not candidates:
