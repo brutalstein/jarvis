@@ -25,3 +25,7 @@ The user directive *prefers* strict TypeScript + PostgreSQL but explicitly allow
 ## ADR-002 — External agents behind offline-only adapters
 
 There are no live credentials, Docker daemon, OpenClaw Gateway, installed Browser Use worker or provider CLIs in the validation environment. Optional adapters expose bounded read-only capabilities but the central engine does not route autonomous side effects to them. Integration activation requires an explicit security/reliability milestone and actual live test evidence.
+
+## Verified echo workflow ingress increment
+
+The n8n ingress uses a dedicated credential that cannot authorize the operator API. The route admits only low-risk, side-effect-free echo tasks. Its authoritative state and idempotency records reside in the same Core SQLite store as ordinary developer tasks. The template workflow does not confer global agent dispatch authority; any upgrade requires a separately reviewed action gateway and live-service verification.

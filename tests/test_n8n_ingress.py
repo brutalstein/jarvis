@@ -98,3 +98,44 @@ def test_integration_secret_cannot_equal_operator_secret(monkeypatch):
         assert response.status_code == 401
     finally:
         store.close()
+
+
+def test_parallel_duplicate_delivery_never_duplicates_action(setup):
+    from concurrent.futures import ThreadPoolExecutor
+    client, store = setup
+    headers = {'X-Jarvis-N8n-Token': 'n' * 48}
+
+    def deliver(_):
+        return client.post('/v1/integrations/n8n/echo', json=payload(), headers=headers)
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        results = list(pool.map(deliver, range(16)))
+    assert all(response.status_code in (200, 202) for response in results)
+    assert len({response.json()['task_id'] for response in results}) == 1
+    assert store.db.execute('SELECT COUNT(*) FROM actions').fetchone()[0] == 1
+    assert store.db.execute('SELECT COUNT(*) FROM tasks').fetchone()[0] == 1
+
+
+def test_repeated_delivery_survives_sqlite_restart(tmp_path, monkeypatch):
+    monkeypatch.setenv('JARVIS_N8N_INGEST_TOKEN', 'n' * 48)
+    monkeypatch.setenv('JARVIS_N8N_WORKFLOW_IDS', 'workflow_1')
+    path = str(tmp_path / 'persist.db')
+    first_db = Store(path)
+    try:
+        first = TestClient(create_app(first_db, secret='o' * 48))
+        result = first.post('/v1/integrations/n8n/echo', json=payload(),
+                            headers={'X-Jarvis-N8n-Token': 'n' * 48})
+        assert result.status_code == 200
+        task_id = result.json()['task_id']
+    finally:
+        first_db.close()
+    second_db = Store(path)
+    try:
+        second = TestClient(create_app(second_db, secret='o' * 48))
+        again = second.post('/v1/integrations/n8n/echo', json=payload(),
+                            headers={'X-Jarvis-N8n-Token': 'n' * 48})
+        assert again.status_code == 200
+        assert again.json()['task_id'] == task_id
+        assert second_db.db.execute('SELECT COUNT(*) FROM actions').fetchone()[0] == 1
+    finally:
+        second_db.close()
