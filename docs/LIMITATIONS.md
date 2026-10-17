@@ -9,3 +9,6 @@
 The v0.1 SQLite store is intended for **one process / one host**, not multi-host exactly-once execution. The `BEGIN IMMEDIATE` transaction and action UNIQUE key govern only DB admission; they cannot guarantee an irreversible external side effect happens once. Cancellation of actively running work is rejected rather than falsely marked complete. The echo executor verifies only exact output equality, not semantic validity of arbitrary objectives.
 
 **Integration status:** All live OpenClaw/n8n/BrowserUse/Claude/Codex/Gemini E2E validation blocked by missing configured runtimes, credentials, and external services; any mock or local-only test is labeled as such. No cross-platform CI results until GitHub Actions completes.
+
+
+**Hardening follow-up:** Operation-aware model selection, lease-authorized task mutations, verified action-linked completion and orphaned action-intent quarantine are implemented in the core. External execution isolation and live cross-product tests remain mandatory before broader activation.

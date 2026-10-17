@@ -68,6 +68,7 @@ class Engine:
         worker = worker_id or str(uuid4())
         if not self.store.lease(task_id, worker, time.time(), lease_seconds):
             self.gate.finalize(digest, {'reason': 'lease unavailable'}, verified=False)
+            self.store.quarantine(task_id, 'action admitted without available lease')
             raise Conflict('Task already leased; action requires reconciliation')
         try:
             self.store.transition(task_id, State.RUNNING, owner=worker)
@@ -75,7 +76,8 @@ class Engine:
             # Contract verification: exact equality and no external effects. NOT semantic truth verification.
             verified = isinstance(output, str) and output == task['objective']
             self.store.transition(task_id, State.VERIFYING, owner=worker)
-            evidence = {'checker': 'builtin.echo.equal', 'passed': verified, 'external_side_effects': False}
+            evidence = {'checker': 'builtin.echo.equal', 'passed': verified,
+                        'external_side_effects': False, 'action_digest': digest}
             self.gate.finalize(digest, evidence, verified=verified)
             if verified:
                 self.store.transition(task_id, State.COMPLETED,
@@ -85,8 +87,8 @@ class Engine:
             return ExecutionResult(output, 'builtin.echo', evidence)
         except Exception as exc:
             current = State(self.store.get(task_id)['status'])
-            if current in (State.RUNNING, State.VERIFYING):
-                self.store.transition(task_id, State.RECOVERY_REQUIRED, {'error_type': type(exc).__name__}, owner=worker)
+            if current in (State.READY, State.RUNNING, State.VERIFYING):
+                self.store.quarantine(task_id, f'execution error: {type(exc).__name__}', owner=worker)
             raise
         finally:
             self.store.release(task_id, worker)

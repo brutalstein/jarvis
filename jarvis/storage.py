@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 import json
 import sqlite3
 import threading
+import time
 from typing import Iterator
 from uuid import uuid4
 
@@ -118,10 +119,28 @@ class Store:
             old = State(task['status'])
             if new not in TRANSITIONS[old]:
                 raise Conflict(f'Illegal transition {old} -> {new}')
-            if owner is not None and task['lease_holder'] != owner:
+            # A caller without a lease must never transition an actively owned task.
+            if task['lease_holder'] is not None and task['lease_holder'] != owner:
                 raise Conflict('Worker does not hold lease')
-            if new == State.COMPLETED and (not data or not data.get('verified') or not data.get('evidence')):
-                raise Denied('Completion needs independent verification evidence')
+            if task['lease_holder'] is not None and (
+                task['lease_until'] is None or task['lease_until'] <= time.time()
+            ):
+                raise Conflict('Worker lease expired; reconcile before mutation')
+            if new == State.COMPLETED:
+                evidence = data.get('evidence') if data else None
+                if not data or data.get('verified') is not True or not isinstance(evidence, dict):
+                    raise Denied('Completion requires verification evidence')
+                digest = evidence.get('action_digest')
+                if not isinstance(digest, str):
+                    raise Denied('Completion requires an associated verified action')
+                verification = self.db.execute(
+                    'SELECT status,outcome FROM actions WHERE action_digest=? AND task_id=?',
+                    (digest, task_id),
+                ).fetchone()
+                if not verification or verification['status'] != 'VERIFIED':
+                    raise Denied('Action not verified for this task')
+                if json.loads(verification['outcome']) != evidence:
+                    raise Denied('Evidence does not match recorded verifier output')
             if new == State.READY:
                 unmet = self.db.execute('''SELECT 1 FROM dependencies d JOIN tasks t ON t.id=d.requires
                                           WHERE d.task_id=? AND t.status!=? LIMIT 1''',
@@ -153,13 +172,33 @@ class Store:
                 raise Conflict('Lease not owned')
             self.event(task_id, 'lease.released')
 
-    def reconcile_interrupted(self) -> list[str]:
-        """Fail closed: running or verifying tasks become RECOVERY_REQUIRED, never auto-retried."""
+    def quarantine(self, task_id: str, reason: str, *, owner: str | None = None) -> None:
+        """Privileged recovery transition: mark an externally ambiguous task non-runnable."""
         with self.tx():
-            rows = self.db.execute('SELECT id FROM tasks WHERE status IN (?,?)',
-                                   (State.RUNNING, State.VERIFYING)).fetchall()
-            for r in rows:
+            task = self.get(task_id)
+            if task['lease_holder'] is not None and task['lease_holder'] != owner:
+                raise Conflict('Recovery attempted by non-owner')
+            if State(task['status']) in (State.COMPLETED, State.FAILED, State.CANCELLED, State.BLOCKED):
+                raise Conflict('Terminal task cannot be quarantined')
+            self.db.execute('UPDATE tasks SET status=?,updated_at=? WHERE id=?',
+                            (State.RECOVERY_REQUIRED, utc(), task_id))
+            self.event(task_id, 'recovery.required', {'reason': reason})
+
+    def reconcile_interrupted(self) -> list[str]:
+        """Quarantine both interrupted workers AND orphaned/uncertain action intentions."""
+        with self.tx():
+            rows = self.db.execute('''SELECT DISTINCT t.id FROM tasks t
+                LEFT JOIN actions a ON a.task_id=t.id
+                WHERE t.status IN (?,?)
+                  OR (a.status IN ('INTENT_RECORDED','RECOVERY_REQUIRED')
+                      AND t.status NOT IN (?,?,?,?))''',
+                (State.RUNNING, State.VERIFYING, State.COMPLETED, State.FAILED,
+                 State.CANCELLED, State.BLOCKED)).fetchall()
+            for row in rows:
                 self.db.execute('UPDATE tasks SET status=?,lease_holder=NULL,lease_until=NULL,updated_at=? WHERE id=?',
-                                (State.RECOVERY_REQUIRED, utc(), r['id']))
-                self.event(r['id'], 'recovery.required', {'reason': 'ambiguous shutdown outcome'})
-            return [r['id'] for r in rows]
+                                (State.RECOVERY_REQUIRED, utc(), row['id']))
+                self.db.execute('''UPDATE actions SET status='RECOVERY_REQUIRED'
+                    WHERE task_id=? AND status='INTENT_RECORDED' ''', (row['id'],))
+                self.event(row['id'], 'recovery.required',
+                           {'reason': 'interrupted worker or unresolved external action'})
+            return [row['id'] for row in rows]

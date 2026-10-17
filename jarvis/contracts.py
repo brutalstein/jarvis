@@ -80,6 +80,9 @@ class Capability:
     max_cost: float = 0
     priority: int = 100
     supports_tools: bool = False
+    operations: frozenset[str] = field(default_factory=lambda: frozenset({'model.text'}))
+    authenticated: bool = True
+    healthy: bool = True
 
 @dataclass(frozen=True)
 class TaskSpec:
