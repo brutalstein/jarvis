@@ -1,0 +1,58 @@
+{
+  "name": "JARVIS Core - n8n bounded echo integration (proof)",
+  "nodes": [
+    {
+      "id": "1e671248-82b1-4a43-8ecf-f8afc9fb29d9",
+      "name": "When clicking Execute workflow",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "54fb5de5-a6d4-409a-81cf-2ff9976a27f4",
+      "name": "Call JARVIS Core (authenticated)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        490,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8765/v1/integrations/n8n/echo",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({workflow_id: $workflow.id, execution_id: $execution.id, objective: 'n8n verified echo proof'}) }}",
+        "options": {
+          "timeout": 10000
+        }
+      }
+    }
+  ],
+  "connections": {
+    "When clicking Execute workflow": {
+      "main": [
+        [
+          {
+            "node": "Call JARVIS Core (authenticated)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "pinData": {},
+  "tags": []
+}
