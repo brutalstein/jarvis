@@ -57,19 +57,25 @@ class Engine:
         """A real local deterministic execution path; not a simulated model integration."""
         task = self.store.get(task_id)
         action = self.propose_echo(task_id)
+        worker = worker_id or str(uuid4())
         if task['status'] == State.WAITING_FOR_APPROVAL:
-            # Preserve WAITING state until gate validates exact approval.
+            # Exact approval must be consumed while the task is still waiting.
             digest = self.gate.authorize(action, principal, approval_id)
             self.store.transition(task_id, State.READY)
+            if not self.store.lease(task_id, worker, time.time(), lease_seconds):
+                self.gate.finalize(digest, {'reason': 'lease unavailable'}, verified=False)
+                raise Conflict('Action admitted but lease unavailable; reconciliation required')
         elif task['status'] == State.READY:
-            digest = self.gate.authorize(action, principal, approval_id)
+            # Acquire ownership *before* recording the low-risk action intention.
+            if not self.store.lease(task_id, worker, time.time(), lease_seconds):
+                raise Conflict('Task already leased; no action admitted')
+            try:
+                digest = self.gate.authorize(action, principal, approval_id)
+            except BaseException:
+                self.store.release(task_id, worker)
+                raise
         else:
             raise Conflict('Task not ready')
-        worker = worker_id or str(uuid4())
-        if not self.store.lease(task_id, worker, time.time(), lease_seconds):
-            self.gate.finalize(digest, {'reason': 'lease unavailable'}, verified=False)
-            self.store.quarantine(task_id, 'action admitted without available lease')
-            raise Conflict('Task already leased; action requires reconciliation')
         try:
             self.store.transition(task_id, State.RUNNING, owner=worker)
             output = action.parameters['text']

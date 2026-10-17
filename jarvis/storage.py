@@ -141,6 +141,12 @@ class Store:
                     raise Denied('Action not verified for this task')
                 if json.loads(verification['outcome']) != evidence:
                     raise Denied('Evidence does not match recorded verifier output')
+            if old == State.RECOVERY_REQUIRED and new == State.READY:
+                unresolved = self.db.execute('''SELECT 1 FROM actions
+                    WHERE task_id=? AND status IN ('INTENT_RECORDED','RECOVERY_REQUIRED') LIMIT 1''',
+                    (task_id,)).fetchone()
+                if unresolved:
+                    raise Denied('Unreconciled action: external effect must be investigated before retry')
             if new == State.READY:
                 unmet = self.db.execute('''SELECT 1 FROM dependencies d JOIN tasks t ON t.id=d.requires
                                           WHERE d.task_id=? AND t.status!=? LIMIT 1''',
@@ -190,10 +196,12 @@ class Store:
             rows = self.db.execute('''SELECT DISTINCT t.id FROM tasks t
                 LEFT JOIN actions a ON a.task_id=t.id
                 WHERE t.status IN (?,?)
+                  OR (t.status=? AND t.lease_holder IS NOT NULL)
                   OR (a.status IN ('INTENT_RECORDED','RECOVERY_REQUIRED')
                       AND t.status NOT IN (?,?,?,?,?))''',
-                (State.RUNNING, State.VERIFYING, State.COMPLETED, State.FAILED,
-                 State.CANCELLED, State.BLOCKED, State.RECOVERY_REQUIRED)).fetchall()
+                (State.RUNNING, State.VERIFYING, State.READY,
+                 State.COMPLETED, State.FAILED, State.CANCELLED,
+                 State.BLOCKED, State.RECOVERY_REQUIRED)).fetchall()
             for row in rows:
                 self.db.execute('UPDATE tasks SET status=?,lease_holder=NULL,lease_until=NULL,updated_at=? WHERE id=?',
                                 (State.RECOVERY_REQUIRED, utc(), row['id']))

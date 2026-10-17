@@ -228,3 +228,28 @@ def test_completion_does_not_accept_other_tasks_verified_action(setup):
     with pytest.raises(Denied):
         setup.store.transition(other['id'], State.COMPLETED,
                                {'verified': True, 'evidence': {'action_digest': digest}})
+
+def test_abandoned_ready_lease_is_quarantined(tmp_path):
+    path = str(tmp_path / 'lease-recovery.db')
+    one = Store(path)
+    task = Engine(one).admit(TaskSpec('test'))
+    assert one.lease(task['id'], 'dead-worker', time.time(), 100)
+    one.close()
+    two = Store(path)
+    assert two.reconcile_interrupted() == [task['id']]
+    assert two.get(task['id'])['status'] == State.RECOVERY_REQUIRED
+    two.close()
+
+
+def test_unreconciled_action_blocks_recovery_retry(tmp_path):
+    path = str(tmp_path / 'unreconciled.db')
+    one = Store(path)
+    task = Engine(one).admit(TaskSpec('uncertain'))
+    action = Engine(one).propose_echo(task['id'])
+    Engine(one).gate.authorize(action, OP)
+    one.close()
+    two = Store(path)
+    two.reconcile_interrupted()
+    with pytest.raises(Denied, match='Unreconciled'):
+        two.transition(task['id'], State.READY)
+    two.close()

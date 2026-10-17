@@ -23,3 +23,8 @@ These guarantees are confined to the local SQLite core; no OS sandbox or externa
 ## Verification
 
 Run `python -m pytest -q`, `python -m compileall -q jarvis services`, and `python -m ruff check jarvis services tests --select E4,E7,E9,F`. GitHub Actions tests Python 3.12 and 3.13 on Windows and Ubuntu. These are not live provider tests.
+
+6. Low-risk actions acquire a worker lease before a side-effect intent is recorded. Abandoned READY leases are quarantined on restart.
+7. RECOVERY_REQUIRED tasks with an unresolved action cannot be made READY without explicit reconciliation.
+8. OpenClaw Gateway read-only access now checks protocol and granted scopes from the actual hello-ok response.
+9. CI uses the current GitHub-maintained Node 24+ based checkout/setup-python actions.
