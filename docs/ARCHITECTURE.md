@@ -33,3 +33,7 @@ The n8n ingress uses a dedicated credential that cannot authorize the operator A
 ## Canonical backend layout
 
 The implementation is now partitioned into five packages with one-way dependencies and regression tests. Existing top-level `jarvis.*` modules are re-export facades, not duplicate implementations. See [module boundaries](MODULE_BOUNDARIES.md). The next change is to remove persistence-specific SQL from application policy behind a typed port, without weakening atomic approvals.
+
+## TaskRepository storage port (refactor milestone)
+
+The application engine and action authorization now import only the typed `TaskRepository` interface. The SQLite adapter owns approval creation, exact-digest consumption and durable action finalization as atomic transactions. The authorization layer continues to reject all externally privileged kinds by default. This isolates future PostgreSQL migration from the application API **without claiming distributed transactional guarantees**. See `tests/test_policy_repository.py` for concurrent single-use approval and failed-transaction regression evidence.
