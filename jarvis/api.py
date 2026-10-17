@@ -122,16 +122,16 @@ def create_app(store: Store | None = None, secret: str | None = None):
 
     @app.post('/v1/integrations/n8n/echo')
     def n8n_echo(body: N8nEchoRequest, x_jarvis_n8n_token: str | None = Header(default=None)):
-        token = os.getenv('JARVIS_N8N_INGEST_TOKEN', '')
+        n8n_token = os.getenv('JARVIS_N8N_INGEST_TOKEN', '')
         allowed = {
             value.strip() for value in os.getenv('JARVIS_N8N_WORKFLOW_IDS', '').split(',')
             if value.strip()
         }
         # Fail-closed without a separately provisioned, suitably long secret and
         # explicit workflow allowlist. Nothing shares the operator bearer token.
-        if len(token) < 32 or not x_jarvis_n8n_token or not hmac.compare_digest(
-            token, x_jarvis_n8n_token
-        ):
+        if (len(n8n_token) < 32 or hmac.compare_digest(n8n_token, token)
+                or not x_jarvis_n8n_token or not hmac.compare_digest(
+                    n8n_token, x_jarvis_n8n_token)):
             raise HTTPException(status_code=401, detail='Invalid n8n integration credential')
         if body.workflow_id not in allowed:
             raise HTTPException(status_code=403, detail='Workflow is not authorized')

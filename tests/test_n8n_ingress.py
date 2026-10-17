@@ -87,3 +87,14 @@ def test_execution_identity_is_validated_and_bounded(setup):
                        json=payload(execution='x' * 120), headers=h).status_code == 422
     assert client.post('/v1/integrations/n8n/echo',
                        json=payload(objective='x' * 2500), headers=h).status_code == 422
+
+def test_integration_secret_cannot_equal_operator_secret(monkeypatch):
+    monkeypatch.setenv('JARVIS_N8N_INGEST_TOKEN', 'o' * 48)
+    store = Store(':memory:')
+    try:
+        client = TestClient(create_app(store, secret='o' * 48))
+        response = client.post('/v1/integrations/n8n/echo', json=payload(),
+                               headers={'X-Jarvis-N8n-Token': 'o' * 48})
+        assert response.status_code == 401
+    finally:
+        store.close()
