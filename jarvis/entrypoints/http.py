@@ -2,7 +2,7 @@
 import hmac
 import os
 
-from ..domain.contracts import Conflict, Denied, Risk, State, TaskSpec
+from ..domain.contracts import Conflict, Denied, Risk, TaskSpec
 from ..application.engine import Engine
 from ..application.policy import Principal
 from ..persistence.sqlite import Store
