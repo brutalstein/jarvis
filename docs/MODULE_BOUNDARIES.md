@@ -20,15 +20,15 @@ jarvis/
 | Package | Can depend on | Must NOT depend on |
 |---|---|---|
 | domain | domain, stdlib | application, persistence, integrations, entrypoints |
-| application | domain, application, persistence (temporary) | integrations, entrypoints |
+| application | domain, application | integrations, entrypoints |
 | persistence | domain, persistence | application, integrations, entrypoints |
 | integrations | domain, integrations | application, persistence, entrypoints |
 | entrypoints | domain, application, persistence, integrations | no other business authority |
 
-The current application policy references the concrete SQLite store for transactional
-authorization. This is a **documented remaining coupling**. The next milestone is a
-typed repository port and database-specific atomic policy operations: never weaken
-transactional behavior just to conform to dependency-direction ideals.
+Application policy and task engine now depend on the runtime-checkable `TaskRepository`
+protocol. SQLite implements approval/action journaling atomically behind that port;
+future PostgreSQL support must implement the **same transaction semantics** rather
+than creating parallel approval state or weakening replay protection.
 
 Use canonical imports in new code: `jarvis.domain.*`, `jarvis.application.*`,
 `jarvis.persistence.*`, `jarvis.integrations.*`, and `jarvis.entrypoints.*`.

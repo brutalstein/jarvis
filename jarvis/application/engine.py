@@ -10,7 +10,7 @@ from uuid import uuid4
 
 from ..domain.contracts import Action, Conflict, Denied, Risk, State, TaskSpec
 from .policy import ActionGate, Principal
-from ..persistence.sqlite import Store
+from .ports import TaskRepository
 
 @dataclass(frozen=True)
 class ExecutionResult:
@@ -19,7 +19,7 @@ class ExecutionResult:
     evidence: dict
 
 class Engine:
-    def __init__(self, store: Store) -> None:
+    def __init__(self, store: TaskRepository) -> None:
         self.store = store
         self.gate = ActionGate(store)
 

@@ -14,6 +14,7 @@ from jarvis.routing import Router
 from jarvis.storage import Store
 from jarvis.application.engine import Engine as CoreEngine
 from jarvis.application.policy import ActionGate as CoreGate
+from jarvis.application.ports import TaskRepository
 from jarvis.domain.contracts import Action as DomainAction, TaskSpec as DomainTaskSpec
 from jarvis.domain.routing import Router as DomainRouter
 from jarvis.entrypoints.cli import main as EntryMain
@@ -39,7 +40,7 @@ def test_backward_compatible_imports_share_exactly_one_implementation():
 
 ALLOWED = {
     'domain': {'domain'},
-    'application': {'application', 'domain', 'persistence'},
+    'application': {'application', 'domain'},
     'persistence': {'persistence', 'domain'},
     'integrations': {'integrations', 'domain'},
     'entrypoints': {'entrypoints', 'application', 'domain', 'persistence', 'integrations'},
@@ -72,3 +73,13 @@ def test_legacy_facades_cannot_accumulate_duplicated_business_logic():
         assert not any(isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
                        for node in nodes), f'Business code accidentally added to {name} facade'
         assert len(source.splitlines()) <= 20, f'{name} is no longer a thin facade'
+
+
+def test_database_store_satisfies_business_repository_contract(tmp_path):
+    storage = Store(str(tmp_path / 'port.db'))
+    try:
+        assert isinstance(storage, TaskRepository)
+        task = Engine(storage).admit(TaskSpec('port-conformance'))
+        assert task['status'] == 'READY'
+    finally:
+        storage.close()

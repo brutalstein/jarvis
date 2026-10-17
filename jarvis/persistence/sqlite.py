@@ -6,6 +6,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from datetime import datetime, timezone
 import json
+import hmac
 import sqlite3
 import threading
 import time
@@ -65,6 +66,73 @@ class Store:
     def event(self, task_id: str, kind: str, data: dict | None = None) -> None:
         self.db.execute('INSERT INTO events(task_id,kind,data,at) VALUES(?,?,?,?)',
                         (task_id, kind, json.dumps(data or {}, sort_keys=True), utc()))
+
+
+    def record_approval(self, approval_id: str, task_id: str, digest: str, ttl: int) -> None:
+        with self.tx():
+            self.db.execute(
+                'INSERT INTO approvals(id,task_id,action_digest,expires_at,created_at) VALUES(?,?,?,?,?)',
+                (approval_id, task_id, digest, time.time() + ttl, utc()),
+            )
+            self.event(task_id, 'approval.requested',
+                       {'approval_id': approval_id, 'digest': digest})
+
+    def grant_approval_record(self, approval_id: str) -> None:
+        with self.tx():
+            row = self.db.execute('SELECT * FROM approvals WHERE id=?', (approval_id,)).fetchone()
+            if not row or row['expires_at'] <= time.time() or row['granted_at'] is not None:
+                raise Denied('Unknown, expired or already granted approval')
+            self.db.execute('UPDATE approvals SET granted_at=? WHERE id=?',
+                            (time.time(), approval_id))
+            self.event(row['task_id'], 'approval.granted',
+                       {'id': approval_id, 'digest': row['action_digest']})
+
+    def authorize_action_record(
+        self, digest: str, task_id: str, kind: str, *,
+        requires_approval: bool, approval_id: str | None,
+    ) -> None:
+        """Atomically prevent replay and consume the matching single-use approval."""
+        with self.tx():
+            task = self.db.execute('SELECT status FROM tasks WHERE id=?', (task_id,)).fetchone()
+            if not task or task['status'] not in ('READY', 'RUNNING', 'WAITING_FOR_APPROVAL'):
+                raise Denied('Task state changed during action admission')
+            prior = self.db.execute(
+                'SELECT status FROM actions WHERE action_digest=?', (digest,)
+            ).fetchone()
+            if prior:
+                raise Conflict(f'Action already admitted with state {prior["status"]}')
+            if requires_approval:
+                row = self.db.execute(
+                    'SELECT * FROM approvals WHERE id=? AND task_id=?', (approval_id, task_id)
+                ).fetchone()
+                if (not row or not hmac.compare_digest(row['action_digest'], digest)
+                        or row['granted_at'] is None or row['consumed_at'] is not None
+                        or row['expires_at'] <= time.time()):
+                    raise Denied('Valid single-use, exact-action approval required')
+                self.db.execute(
+                    'UPDATE approvals SET consumed_at=? WHERE id=? AND consumed_at IS NULL',
+                    (time.time(), approval_id),
+                )
+            self.db.execute(
+                'INSERT INTO actions(action_digest,task_id,status,at) VALUES(?,?,?,?)',
+                (digest, task_id, 'INTENT_RECORDED', utc()),
+            )
+            self.event(task_id, 'action.authorized', {'digest': digest, 'kind': kind})
+
+    def finalize_action_record(self, digest: str, outcome: dict, *, verified: bool) -> None:
+        with self.tx():
+            row = self.db.execute(
+                'SELECT task_id,status FROM actions WHERE action_digest=?', (digest,)
+            ).fetchone()
+            if not row or row['status'] != 'INTENT_RECORDED':
+                raise Conflict('No unfinished action intention')
+            status = 'VERIFIED' if verified else 'RECOVERY_REQUIRED'
+            self.db.execute(
+                'UPDATE actions SET status=?,outcome=? WHERE action_digest=?',
+                (status, json.dumps(outcome, sort_keys=True), digest),
+            )
+            self.event(row['task_id'], 'action.finalized',
+                       {'digest': digest, 'status': status})
 
     def get(self, task_id: str) -> dict:
         with self.lock:
