@@ -29,6 +29,6 @@ If n8n is in WSL2 or Docker and the Core is bound to Windows loopback, `127.0.0.
 
 ## Verification evidence and limitations
 
-Offline FastAPI integration tests exercise actual HTTP requests through the task, policy, persistence and verifier, including failure, replay and missing token cases. This is **not** a test against a running n8n service. Separate opt-in live tests and a packaged workflow export remain outstanding.
+Offline FastAPI integration tests exercise actual HTTP requests through the task, policy, persistence and verifier, including failure, replay and missing token cases. This is **not** a test against a running n8n service. An importable workflow export is provided at `examples/n8n/verified-echo.json` with no embedded credentials. Separate opt-in live testing against an actual n8n service remains outstanding.
 
 The first proof workflow is intentionally synchronous, bounded and side-effect-free. General-purpose automation needs a separately reviewed action registry, independent verification and external reconciliation before it can be enabled.
