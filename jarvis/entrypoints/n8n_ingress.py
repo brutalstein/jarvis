@@ -3,7 +3,6 @@
 n8n has no right to select a model, tool, task risk level, or external side effect.
 This route remains a bounded local echo demonstration until sandboxed agent execution exists.
 """
-from __future__ import annotations
 
 import hmac
 import os
