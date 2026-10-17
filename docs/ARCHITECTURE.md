@@ -29,3 +29,7 @@ There are no live credentials, Docker daemon, OpenClaw Gateway, installed Browse
 ## Verified echo workflow ingress increment
 
 The n8n ingress uses a dedicated credential that cannot authorize the operator API. The route admits only low-risk, side-effect-free echo tasks. Its authoritative state and idempotency records reside in the same Core SQLite store as ordinary developer tasks. The template workflow does not confer global agent dispatch authority; any upgrade requires a separately reviewed action gateway and live-service verification.
+
+## Canonical backend layout
+
+The implementation is now partitioned into five packages with one-way dependencies and regression tests. Existing top-level `jarvis.*` modules are re-export facades, not duplicate implementations. See [module boundaries](MODULE_BOUNDARIES.md). The next change is to remove persistence-specific SQL from application policy behind a typed port, without weakening atomic approvals.

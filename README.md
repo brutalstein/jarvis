@@ -64,3 +64,7 @@ See [Core hardening](docs/CORE_HARDENING.md) for enforced routing, lease, verifi
 ## n8n ingress (bounded proof workflow)
 
 A dedicated, opt-in n8n task ingress supports idempotent, verified, side-effect-free echo requests without sharing the operator token. See [n8n ingress](docs/N8N_INGRESS.md). This is a developer proof path, not an autonomous n8n→OpenClaw integration.
+
+## Modular backend design
+
+The core uses a single **modular monolith**: `jarvis/domain` (contracts/router), `jarvis/application` (task engine and action policy), `jarvis/persistence` (transactional SQLite), `jarvis/integrations` (one adapter per external tool), and `jarvis/entrypoints` (HTTP/CLI). Previous top-level imports still work via thin compatibility facades. See [module boundaries](docs/MODULE_BOUNDARIES.md). No competing agent orchestration system has been introduced.
